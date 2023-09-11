@@ -1,5 +1,5 @@
 # AnoOnly
-The official implementation of "AnoOnly: Semi-Supervised Anomaly Detection with the Only Loss on Anomalies".
+The official implementation of "[AnoOnly: Semi-Supervised Anomaly Detection with the Only Loss on Anomalies](https://arxiv.org/pdf/2305.18798.pdf)".
 
 ## Abstract
 Semi-supervised anomaly detection (SSAD) methods have demonstrated their effectiveness in enhancing unsupervised anomaly detection (UAD) by leveraging few-shot but instructive abnormal instances. However, the dominance of homogeneous normal data over anomalies biases the SSAD models against effectively perceiving anomalies. To address this issue and achieve balanced supervision between heavily imbalanced normal and abnormal data, we develop a novel framework called *AnoOnly* (**Ano**maly **Only**). Unlike existing SSAD methods that resort to strict loss supervision, AnoOnly suspends it and introduces a form of weak supervision for normal data. This weak supervision is instantiated through the utilization of batch normalization, which implicitly performs cluster learning on normal data. When integrated into existing SSAD methods, the proposed AnoOnly demonstrates remarkable performance enhancements across various models and datasets, achieving new state-of-the-art performance. Additionally, our AnoOnly is natively robust to label noise when suffering from data contamination.
