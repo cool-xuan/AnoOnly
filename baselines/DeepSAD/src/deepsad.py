@@ -3,9 +3,7 @@ import torch
 
 from baseline.DeepSAD.src.base.base_dataset import BaseADDataset
 from baseline.DeepSAD.src.networks.main import build_network, build_autoencoder
-# from baseline.DeepSAD.src.optim.DeepSAD_trainer import DeepSADTrainer
-# from baseline.DeepSAD.src.optim.DeepSAD_trainer_AdamSAM import DeepSADTrainer
-from baseline.DeepSAD.src.optim.DeepSAD_trainer_my import DeepSADTrainer
+from baseline.DeepSAD.src.optim.DeepSAD_trainer import DeepSADTrainer
 from baseline.DeepSAD.src.optim.ae_trainer import AETrainer
 
 
@@ -62,19 +60,20 @@ class deepsad(object):
         self.net_name = net_name
         self.net = build_network(net_name, input_size)
 
-    def train(self, dataset: BaseADDataset, optimizer_name: str = 'adam', lr: float = 0.001, rho: float = 0.05, n_epochs: int = 50,
+    def train(self, dataset: BaseADDataset, optimizer_name: str = 'adam', lr: float = 0.001, n_epochs: int = 50,
               lr_milestones: tuple = (), batch_size: int = 128, weight_decay: float = 1e-6, device: str = 'cuda',
-              n_jobs_dataloader: int = 0, dataset_test=None):
+              n_jobs_dataloader: int = 0, anomaly_only=False):
         """Trains the Deep SAD model on the training data."""
 
         self.optimizer_name = optimizer_name
-        self.trainer = DeepSADTrainer(self.c, self.eta, optimizer_name=optimizer_name, lr=lr, rho=rho, n_epochs=n_epochs,
+        self.trainer = DeepSADTrainer(self.c, self.eta, optimizer_name=optimizer_name, lr=lr, n_epochs=n_epochs,
                                       lr_milestones=lr_milestones, batch_size=batch_size, weight_decay=weight_decay,
-                                      device=device, n_jobs_dataloader=n_jobs_dataloader)
+                                      device=device, n_jobs_dataloader=n_jobs_dataloader, 
+                                      anomaly_only=anomaly_only)
         # Get the model
-        self.net = self.trainer.train(dataset, self.net, dataset_test)
+        self.net = self.trainer.train(dataset, self.net)
         self.results['train_time'] = self.trainer.train_time
-        # self.c = self.trainer.c.cpu().data.numpy().tolist()  # get as list
+        self.c = self.trainer.c.cpu().data.numpy().tolist()  # get as list
 
     def test(self, dataset: BaseADDataset, device: str = 'cuda', n_jobs_dataloader: int = 0):
         """Tests the Deep SAD model on the test data."""

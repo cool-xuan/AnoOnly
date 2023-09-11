@@ -15,7 +15,7 @@ import tensorflow as tf
 from keras import regularizers
 from keras import backend as K
 from keras.models import Model, load_model
-from keras.layers import Input, Dense
+from keras.layers import Input, Dense, BatchNormalization
 from keras.callbacks import ModelCheckpoint, TensorBoard
 
 try:
@@ -38,20 +38,13 @@ from sklearn.model_selection import train_test_split
 from myutils import Utils
 import time
 
-from baseline.DevNet.sam_tf import sam_train_step
-
-class SAMModel(Model):
-    def train_step(self, data):
-        return sam_train_step(self, data)
-    
-MyModel = Model
-# MyModel = SAMModel
 
 class DevNet():
-    def __init__(self, seed, model_name='DevNet', ano_ratio=0.5, save_suffix='test'):
+    def __init__(self, seed, model_name='DevNet', anomaly_only=False, ano_ratio=0.5, save_suffix='test'):
         self.utils = Utils()
         self.device = self.utils.get_device()  # get device
         self.seed = seed
+        self.anomaly_only = anomaly_only
         self.MAX_INT = np.iinfo(np.int32).max
 
         # self.sess = tf.Session() #for old version tf
@@ -97,8 +90,10 @@ class DevNet():
                     kernel_regularizer=regularizers.l2(0.01), name = 'hl2')(intermediate)
         intermediate = Dense(20, activation='relu',
                     kernel_regularizer=regularizers.l2(0.01), name = 'hl3')(intermediate)
+        if self.anomaly_only:
+            intermediate = BatchNormalization()(intermediate)
         intermediate = Dense(1, activation='linear', name = 'score')(intermediate)
-        return MyModel(x_input, intermediate)
+        return Model(x_input, intermediate)
 
     def dev_network_s(self,input_shape):
         '''
@@ -107,8 +102,10 @@ class DevNet():
         x_input = Input(shape=input_shape)
         intermediate = Dense(20, activation='relu',
                     kernel_regularizer=regularizers.l2(0.01), name = 'hl1')(x_input)
+        if self.anomaly_only:
+            intermediate = BatchNormalization()(intermediate)
         intermediate = Dense(1, activation='linear',  name = 'score')(intermediate)
-        return MyModel(x_input, intermediate)
+        return Model(x_input, intermediate)
 
     def dev_network_linear(self,input_shape):
         '''
@@ -116,8 +113,10 @@ class DevNet():
         raw inputs to anomaly scores
         '''
         x_input = Input(shape=input_shape)
+        if self.anomaly_only:
+            intermediate = BatchNormalization()(intermediate)
         intermediate = Dense(1, activation='linear',  name = 'score')(x_input)
-        return MyModel(x_input, intermediate)
+        return Model(x_input, intermediate)
 
     def deviation_loss(self, y_true, y_pred):
         '''
@@ -129,11 +128,14 @@ class DevNet():
         if self.ref is None:
             self.ref = K.variable(np.random.normal(loc = 0., scale= 1.0, size = 5000), dtype='float32')
         dev = (y_pred - K.mean(self.ref)) / K.std(self.ref)
-        inlier_loss = K.abs(dev)
-        outlier_loss = K.abs(K.maximum(confidence_margin - dev, 0.))
+        dev = y_pred
+        inlier_loss  = dev
+        outlier_loss = confidence_margin - dev
 
-        # return K.mean((1 - y_true) * inlier_loss + y_true * outlier_loss)
-        return K.mean(y_true * outlier_loss)
+        if self.anomaly_only:
+            return y_true * outlier_loss
+        else:
+            return (1 - y_true) * K.abs(inlier_loss) + y_true * K.abs(outlier_loss)
 
     def deviation_network(self, input_shape, network_depth):
         '''
@@ -147,7 +149,7 @@ class DevNet():
             model = self.dev_network_linear(input_shape)
         else:
             sys.exit("The network depth is not set properly")
-        rms = RMSprop(clipnorm=1.)
+        rms = RMSprop(lr=2e-4)
         model.compile(loss=self.deviation_loss, optimizer=rms)
         return model
 
@@ -195,14 +197,14 @@ class DevNet():
         n_inliers = len(inlier_indices)
         n_outliers = len(outlier_indices)
         for i in range(batch_size):
-            if(i % 2 == 0):
-                sid = rng.choice(n_inliers, 1)
-                ref[i] = inlier_indices[sid]
-                training_labels += [0]
-            else:
+            if(i % 4 == 0):
                 sid = rng.choice(n_outliers, 1)
                 ref[i] = outlier_indices[sid]
                 training_labels += [1]
+            else:
+                sid = rng.choice(n_inliers, 1)
+                ref[i] = inlier_indices[sid]
+                training_labels += [0]
         ref = X_train[ref, :].toarray()
         return ref, np.array(training_labels)
 

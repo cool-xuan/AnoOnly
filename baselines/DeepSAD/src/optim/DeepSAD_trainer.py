@@ -10,13 +10,12 @@ import torch
 import torch.optim as optim
 import numpy as np
 
-from baseline.DeepSAD.src.asam import SAM, ASAM, ADSAM
 
 class DeepSADTrainer(BaseTrainer):
 
-    def __init__(self, c, eta: float, optimizer_name: str = 'adam', lr: float = 0.001, rho:float = 0.05, n_epochs: int = 150,
+    def __init__(self, c, eta: float, optimizer_name: str = 'adam', lr: float = 0.001, n_epochs: int = 150,
                  lr_milestones: tuple = (), batch_size: int = 128, weight_decay: float = 1e-6, device: str = 'cuda',
-                 n_jobs_dataloader: int = 0):
+                 n_jobs_dataloader: int = 0, anomaly_only=False):
         super().__init__(optimizer_name, lr, n_epochs, lr_milestones, batch_size, weight_decay, device,
                          n_jobs_dataloader)
 
@@ -32,8 +31,8 @@ class DeepSADTrainer(BaseTrainer):
         self.test_aucroc = None; self.test_aucpr = None
         self.test_time = None
         self.test_scores = None
-        self.n_epochs = n_epochs
-        self.rho = rho
+        
+        self.anomaly_only = anomaly_only
 
     def train(self, dataset: BaseADDataset, net: BaseNet):
         logger = logging.getLogger()
@@ -46,21 +45,15 @@ class DeepSADTrainer(BaseTrainer):
 
         # Set optimizer (Adam optimizer for now)
         optimizer = optim.Adam(net.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-        # optimizer = optim.SGD(net.parameters(), lr=0.01, weight_decay=1e-6, momentum=0.9)
-        # optimizer = optim.SGD(net.parameters(), lr=self.lr*10, momentum=0.9, weight_decay=self.weight_decay)
-        
+
         # Set learning rate scheduler
-        # scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, self.n_epochs*len(train_loader))
-        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, self.n_epochs)
-        
-        #^ SAM, ASAM optimizer
-        optimizer = ADSAM(optimizer, net, rho=self.rho)
+        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=self.lr_milestones, gamma=0.1)
 
         # Initialize hypersphere center c (if c not loaded)
-        # if self.c is None:
-        #     logger.info('Initializing center c...')
-        #     self.c = self.init_center_c(train_loader, net)
-        #     logger.info('Center c initialized.')
+        if self.c is None:
+            logger.info('Initializing center c...')
+            self.c = self.init_center_c(train_loader, net)
+            logger.info('Center c initialized.')
 
         # Training
         logger.info('Starting training...')
@@ -73,64 +66,31 @@ class DeepSADTrainer(BaseTrainer):
             epoch_start_time = time.time()
             for data in train_loader:
                 inputs, _, semi_targets, _ = data
-                if sum(semi_targets) == 0: continue
                 inputs, semi_targets = inputs.to(self.device), semi_targets.to(self.device)
 
                 # transfer the label "1" to "-1" for the inverse loss
                 semi_targets[semi_targets==1] = -1
 
                 # Zero the network parameter gradients
-                # 
+                optimizer.zero_grad()
 
                 # Update network parameters via backpropagation: forward + backward + optimize
                 outputs = net(inputs)
-                dist = outputs
-                # losses = torch.where(semi_targets == 0, dist, self.eta * ((dist + self.eps) ** semi_targets.float()))
-                # losses = torch.where(semi_targets == 0, torch.zeros_like(dist), self.eta * ((dist + self.eps) ** semi_targets.float()))
-                # losses = torch.where(semi_targets == 0, dist, torch.zeros_like(dist))
-                # ^ simple optim
-                # loss_normal = torch.mean(dist[semi_targets == 0])
-                # loss_anomaly = torch.mean(self.eta * ((dist[semi_targets == -1] + self.eps) ** -1))
-                # loss = loss_normal + loss_anomaly
-                # optimizer.zero_grad()
-                # loss.backward()
-                # optimizer.step()
-                
-                #^ ADSAM
-                loss_normal = torch.mean(dist[semi_targets == 0])
-                loss_normal.backward(retain_graph=True)
-                optimizer.first_step()
-                
-                loss_anomaly = torch.mean(self.eta * ((dist[semi_targets == -1] + self.eps) ** -1))
-                loss_anomaly.backward()
-                optimizer.second_step()
-                
-                outputs = net(inputs)
-                dist = outputs
-                loss_anomaly = torch.mean(self.eta * ((dist[semi_targets == -1] + self.eps) ** -1))
-                loss_anomaly.backward()
-                optimizer.third_step()
-                
-                #^ SAM, ASAM
-                # optimizer.ascent_step()
-                
-                # outputs = net(inputs)
-                # dist = torch.sum((outputs - self.c) ** 2, dim=1)
-                # losses = torch.where(semi_targets == 0, dist, self.eta * ((dist + self.eps) ** semi_targets.float()))
-                # # losses = torch.where(semi_targets == 0, torch.zeros_like(dist), self.eta * ((dist + self.eps) ** semi_targets.float()))
-                # # losses = self.eta * ((dist[semi_targets==-1] + self.eps) ** -1)
-                # # losses = torch.where(semi_targets == 0, dist, torch.zeros_like(dist))
-                # loss = torch.mean(losses)
-                # loss.backward()
-                # optimizer.descent_step()
-                
-                # 
-            # scheduler.step()
-            if epoch in self.lr_milestones:
-                logger.info('  LR scheduler: new learning rate is %g' % float(scheduler.get_lr()[0]))
+                dist = torch.sum((outputs - self.c) ** 2, dim=1)
+                if self.anomaly_only:
+                    ano_idx = semi_targets != 0
+                    losses = self.eta * ((dist[ano_idx] + self.eps) ** -1)
+                else:
+                    losses = torch.where(semi_targets == 0, dist, self.eta * ((dist + self.eps) ** semi_targets.float()))
+                loss = torch.mean(losses)
+                loss.backward()
+                optimizer.step()
+                scheduler.step()
+                if epoch in self.lr_milestones:
+                    logger.info('  LR scheduler: new learning rate is %g' % float(scheduler.get_lr()[0]))
 
-            # epoch_loss += loss.item()
-            n_batches += 1
+                epoch_loss += loss.item()
+                n_batches += 1
 
             # log epoch statistics
             epoch_train_time = time.time() - epoch_start_time
@@ -169,17 +129,17 @@ class DeepSADTrainer(BaseTrainer):
                 idx = idx.to(self.device)
 
                 outputs = net(inputs)
-                # dist = torch.sum((outputs - self.c) ** 2, dim=1)
-                # losses = torch.where(semi_targets == 0, dist, self.eta * ((dist + self.eps) ** semi_targets.float()))
-                # loss = torch.mean(losses)
-                scores = outputs
+                dist = torch.sum((outputs - self.c) ** 2, dim=1)
+                losses = torch.where(semi_targets == 0, dist, self.eta * ((dist + self.eps) ** semi_targets.float()))
+                loss = torch.mean(losses)
+                scores = dist
 
                 # Save triples of (idx, label, score) in a list
                 idx_label_score += list(zip(idx.cpu().data.numpy().tolist(),
                                             labels.cpu().data.numpy().tolist(),
                                             scores.cpu().data.numpy().tolist()))
 
-                # epoch_loss += loss.item()
+                epoch_loss += loss.item()
                 n_batches += 1
 
         self.test_time = time.time() - start_time

@@ -3,7 +3,7 @@ from torch import nn
 import numpy as np
 
 from myutils import Utils
-from baseline.PReNet.model import prenet, prenet_anoonly
+from baseline.PReNet.model import prenet
 from baseline.PReNet.fit import fit
 
 '''
@@ -40,10 +40,7 @@ class PReNet():
         self.y_train = y_train
 
         self.utils.set_seed(self.seed)
-        if self.anomaly_only:
-            self.model = prenet_anoonly(input_size=input_size, act_fun=self.act_fun).to(self.device)
-        else:
-            self.model = prenet(input_size=input_size, act_fun=self.act_fun).to(self.device)
+        self.model = prenet(input_size=input_size, act_fun=self.act_fun, anomaly_only=self.anomaly_only).to(self.device)
         optimizer = torch.optim.RMSprop(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)  # optimizer
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.epochs, eta_min=1e-5)
 

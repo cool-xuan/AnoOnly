@@ -24,9 +24,6 @@ def build_network(net_name, input_size ,ae_net=None):
 
     else:
         net = MLP(x_dim=input_size, h_dims=[100, 20], rep_dim=10, bias=False)
-        # net = MLP(x_dim=input_size, h_dims=[100, ], rep_dim=20, bias=False)
-        # net = MLP(x_dim=input_size, h_dims=[20, ], rep_dim=10, bias=False)
-        # net = MLP(x_dim=input_size, h_dims=[], rep_dim=20, bias=False)
 
     return net
 

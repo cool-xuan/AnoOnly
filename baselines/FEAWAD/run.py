@@ -139,7 +139,6 @@ class FEAWAD():
         intermediate = concatenate([intermediate,sub_norm2],axis=1) # concat the intermediate vector with the residual error
         intermediate = Dense(32, kernel_initializer='glorot_normal',use_bias=True,activation='relu',name = 'hl3')(intermediate)
         intermediate = concatenate([intermediate,sub_norm2],axis=1) # again, concat the intermediate vector with the residual error
-        # if self.anomaly_only:
         intermediate = BatchNormalization()(intermediate)
         output_pre = Dense(1, kernel_initializer='glorot_normal',use_bias=True,activation='linear', name = 'score')(intermediate)
         dev_model = Model(x_input, output_pre)
@@ -150,18 +149,11 @@ class FEAWAD():
             dev = y_pred
             inlier_loss = K.abs(dev)
             outlier_loss = K.abs(K.maximum(confidence_margin - dev, 0.))
-            # inlier_loss  = dev
-            # outlier_loss = K.maximum(confidence_margin - dev, 0.)
 
             sub_nor = tf.norm(sub_result,ord = 2,axis=1)
             outlier_sub_loss = K.abs(K.maximum(confidence_margin - sub_nor, 0.))
             if self.anomaly_only:
-                # loss1 = (1 - y_true) * sub_nor + y_true * (outlier_loss+outlier_sub_loss)
-                # loss1 = (1 - y_true) * sub_nor + y_true * outlier_loss
-                # loss1 = y_true * (outlier_loss+outlier_sub_loss)
-                # loss1 = y_true * outlier_loss # 83.5
-                loss1 = (1 - y_true) * sub_nor + y_true * outlier_loss # 83.9
-                # loss1 =  (1 - y_true) * (inlier_loss+sub_nor) + y_true * (outlier_loss+outlier_sub_loss)
+                loss1 = y_true * (outlier_loss+outlier_sub_loss)
             else:
                 loss1 =  (1 - y_true) * (inlier_loss+sub_nor) + y_true * (outlier_loss+outlier_sub_loss)
 

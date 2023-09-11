@@ -23,11 +23,10 @@ def fit(X_train_tensor, y_train, model, optimizer, epochs, batch_num, batch_size
 
             # loss forward
             if anomaly_only:
-                score = model(X_left, X_right, y)
+                score = model(X_left, X_right)
                 score = score[y!=s_u_u]
                 y = y[y!=s_u_u]
-                loss = torch.mean(torch.abs(y - score) * y / s_a_a)
-                # loss = torch.mean(torch.abs(y[y==s_a_a] - score[y==s_a_a]))
+                loss = torch.mean(torch.abs(y - score))
             else:
                 score = model(X_left, X_right)
                 loss = torch.mean(torch.abs(y - score))
