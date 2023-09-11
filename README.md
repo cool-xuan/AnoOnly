@@ -19,7 +19,7 @@ python scripts run.py \
 ## Overall AUCROC (%) on 10 datasets (5 CV datasets and 5 NLP datasets).
 | Methods | DeepSAD | +AnoOnly | FEAWAD | +AnoOnly | PReNet | +AnoOnly | DevNet | +AnoOnly |
 | ------- | ------- | -------- | ------ | -------- | ------ | -------- | ------ | -------- |
-| AUCROC  | 67.80   | **86.30**    | 81.50  | **85.00**    | 84.20  | **86.70**    | 85.60  | **88.00**    |
+| AUCROC  | 65.4   | **85.0**    | 76.8  | **82.8**    | 82.4  | **84.7**    | 84.4  | **85.2**    |
 
 ## Thanks to
 
